@@ -1,0 +1,63 @@
+#include <ESP32Servo.h>
+
+// ---- Pins ----
+const int RPWM = 32;       // was IN1: forward PWM
+const int LPWM = 33;       // was IN2: reverse PWM
+const int R_EN = 25;       // NEW: enable forward half-bridge
+const int L_EN = 26;       // NEW: enable reverse half-bridge
+const int SERVO_PIN = 18;  // servo signal (change if needed)
+
+Servo myServo;
+
+// ---- Step A: Setup ----
+void setup() {
+  pinMode(RPWM, OUTPUT);
+  pinMode(LPWM, OUTPUT);
+  pinMode(R_EN, OUTPUT);
+  pinMode(L_EN, OUTPUT);
+
+  digitalWrite(R_EN, HIGH);   // NEW: without these the driver stays off
+  digitalWrite(L_EN, HIGH);
+
+  stopMotor();
+
+  myServo.setPeriodHertz(50);
+  myServo.attach(SERVO_PIN, 500, 2400);
+  myServo.write(90);
+}
+
+// ---- Step B: Motor functions ----
+// speed: 0 to 255
+void forward(int speed) {
+  analogWrite(LPWM, 0);       // keep the opposite side off
+  analogWrite(RPWM, speed);
+}
+
+void reverse(int speed) {
+  analogWrite(RPWM, 0);
+  analogWrite(LPWM, speed);
+}
+
+void stopMotor() {
+  analogWrite(RPWM, 0);
+  analogWrite(LPWM, 0);
+}
+
+// ---- Step C: Main loop (demo) ----
+void loop() {
+  forward(200);
+  myServo.write(0);
+  delay(2000);
+
+  stopMotor();
+  myServo.write(90);
+  delay(500);
+
+  reverse(200);
+  myServo.write(180);
+  delay(2000);
+
+  stopMotor();
+  myServo.write(90);
+  delay(1000);
+}
