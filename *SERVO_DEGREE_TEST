@@ -116,3 +116,14 @@ void loop() {
     Serial.println("Commands: 0-180 (angle), 400-2600 (microseconds), s (sweep)");
   }
 }
+
+
+//right now with the empty cataput
+//15 degrees is a good loading degree, But it can change with the bottle loaded
+//0 degreees is a good relse degree
+
+//As of now the sequence for the servo can go 
+//1.servo move to 0 degrees
+//2.arm comes down
+//3.servo moves to 15 degrees (arms locks)
+//4.servo moves to 0 degrees (arm releses)
