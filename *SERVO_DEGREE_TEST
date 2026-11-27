@@ -1,0 +1,118 @@
+
+// ProjectCode CombiendCode
+// INO
+// can you generate some test code for the servo so we can we its range
+
+// Created a file, shared files
+// I made ServoRangeTest. It’s a standalone sketch, so unplug the motor driver’s power while you use it.
+
+// Step 1: Set up the Serial Monitor
+// Open it at 115200 baud and set the line-ending dropdown to Newline. Without that, your commands won’t register.
+
+// Step 2: Check that the servo responds
+// You should see Servo attached: YES, and the servo should move to the center (90°). Then type:
+
+// You type	What happens
+// 0	Moves to 0°
+// 90	Moves to center
+// 180	Moves to 180°
+// s	Slow sweep from 0° to 180° and back
+// If it says NO, or it says YES but nothing moves, the problem is power, ground, or the signal wire, not the range. See Step 1 of my last servo checklist.
+
+// Step 3: Find the real range
+// Servos differ in how far they actually turn, and the angle commands depend on the pulse width the sketch assumes (500 to 2500 µs). To find your servo’s true limits, send pulse widths directly:
+
+// Type 1500 (center) and confirm it moves there.
+// Step down: 1400, 1300, 1200, and so on. Stop when the horn stops moving or you hear it buzz or strain. The last value where it moved cleanly is your minimum.
+// Go back to 1500 and step up: 1600, 1700, and so on, the same way, to find your maximum.
+// Don’t hold a value where it buzzes, since that means the servo is pushing against its physical stop and can overheat.
+
+// Step 4: Put the result in your main code
+// If the real limits turn out to be, say, 600 and 2400, change the attach line in ProjectCode_CombiendCode to match:
+
+// cpp
+// myServo.attach(SERVO_PIN, 600, 2400);
+// Then write(0), write(90), and write(180) will cover the servo’s full travel without straining it.
+
+// Tell me what the Serial Monitor says and how the servo behaves, and I’ll go through the results with you.
+
+// ServoRangeTest
+// INO
+
+
+
+
+
+//ServoRangeTest
+
+// Servo range test: find the real min/max of your servo
+// Type commands in the Serial Monitor (115200 baud, line ending: Newline)
+//   0 to 180      -> move to that angle
+//   400 to 2600   -> move to that pulse width in microseconds
+//   s             -> slow sweep 0 -> 180 -> 0
+ 
+#include <ESP32Servo.h>
+ 
+const int SERVO_PIN = 18;
+const int MIN_US = 500;     // wide range on purpose, so you can find the real limits
+const int MAX_US = 2500;
+ 
+Servo s;
+ 
+void sweep() {
+  Serial.println("Sweep 0 -> 180");
+  for (int a = 0; a <= 180; a += 5) {
+    s.write(a);
+    Serial.println(a);
+    delay(150);
+  }
+  delay(500);
+ 
+  Serial.println("Sweep 180 -> 0");
+  for (int a = 180; a >= 0; a -= 5) {
+    s.write(a);
+    Serial.println(a);
+    delay(150);
+  }
+  Serial.println("Sweep done");
+}
+ 
+void setup() {
+  Serial.begin(115200);
+ 
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+ 
+  s.setPeriodHertz(50);
+  s.attach(SERVO_PIN, MIN_US, MAX_US);
+ 
+  Serial.println(s.attached() ? "Servo attached: YES" : "Servo attached: NO");
+  Serial.println("Commands: 0-180 (angle), 400-2600 (microseconds), s (sweep)");
+ 
+  s.write(90);   // start centered
+}
+ 
+void loop() {
+  if (!Serial.available()) return;
+ 
+  String in = Serial.readStringUntil('\n');
+  in.trim();
+  if (in.length() == 0) return;
+ 
+  if (in == "s" || in == "S") {
+    sweep();
+  } else if (isDigit(in[0])) {
+    int v = in.toInt();
+    if (v >= 0 && v <= 180) {
+      s.write(v);
+      Serial.printf("Angle: %d degrees\n", v);
+    } else if (v >= 400 && v <= 2600) {
+      s.writeMicroseconds(v);
+      Serial.printf("Pulse: %d us\n", v);
+    } else {
+      Serial.println("Out of range. Use 0-180 or 400-2600.");
+    }
+  } else {
+    Serial.println("Commands: 0-180 (angle), 400-2600 (microseconds), s (sweep)");
+  }
+}
