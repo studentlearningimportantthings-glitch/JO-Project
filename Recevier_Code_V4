@@ -1,0 +1,125 @@
+//new recevier code
+
+#include <WiFi.h>
+#include <esp_now.h>
+#include <ESP32Servo.h>
+
+// ---- LEDs ----
+#define LED_PIN 2          // blink LED
+#define PAUSE_LED_PIN 15   // lights while the sender is paused
+
+// ---- Motor driver pins (BTS7960) ----
+const int RPWM = 32;       // forward PWM
+const int LPWM = 33;       // reverse PWM
+const int R_EN = 25;       // enable forward half-bridge
+const int L_EN = 26;       // enable reverse half-bridge
+const int SERVO_PIN = 18;  // servo signal
+
+Servo myServo;
+
+// Must match the sender exactly
+typedef struct {
+  int count;
+  bool ledState;
+  bool paused;
+} Message;
+
+Message msg;
+
+// ---- Sequence state ----
+// 0 = idle, 1 = forward, 2 = short stop, 3 = reverse
+int seqStep = 0;
+unsigned long stepStart = 0;
+bool lastPaused = false;
+volatile bool startRequested = false;   // set by the radio callback, read in loop()
+
+// ---- Motor functions (speed: 0 to 255) ----
+void forward(int speed) {
+  analogWrite(LPWM, 0);       // keep the opposite side off
+  analogWrite(RPWM, speed);
+}
+
+void reverse(int speed) {
+  analogWrite(RPWM, 0);
+  analogWrite(LPWM, speed);
+}
+
+void stopMotor() {
+  analogWrite(RPWM, 0);
+  analogWrite(LPWM, 0);
+}
+
+// Runs automatically whenever a message arrives
+// (on older ESP32 core 2.x, change the first parameter to: const uint8_t *mac)
+void onReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  memcpy(&msg, data, sizeof(msg));
+  digitalWrite(LED_PIN, msg.ledState);
+  digitalWrite(PAUSE_LED_PIN, msg.paused);
+
+  // Start the motor sequence only at the moment the button is pressed
+  if (msg.paused && !lastPaused) {
+    startRequested = true;
+  }
+  lastPaused = msg.paused;
+
+  Serial.printf("Received #%d, LED=%d, paused=%d\n", msg.count, msg.ledState, msg.paused);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(PAUSE_LED_PIN, OUTPUT);
+  digitalWrite(PAUSE_LED_PIN, LOW);
+
+  pinMode(RPWM, OUTPUT);
+  pinMode(LPWM, OUTPUT);
+  pinMode(R_EN, OUTPUT);
+  pinMode(L_EN, OUTPUT);
+  digitalWrite(R_EN, HIGH);   // without these the driver stays off
+  digitalWrite(L_EN, HIGH);
+  stopMotor();
+
+  myServo.setPeriodHertz(50);
+  myServo.attach(SERVO_PIN, 500, 2400);
+  myServo.write(90);
+
+  WiFi.mode(WIFI_STA);
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+  esp_now_register_recv_cb(onReceive);
+}
+
+void loop() {
+  // Button press arrived: begin the sequence (unless one is already running)
+  if (startRequested) {
+    startRequested = false;
+    if (seqStep == 0) {
+      seqStep = 1;
+      stepStart = millis();
+      forward(200);
+      myServo.write(0);
+      Serial.println("Motor sequence started");
+    }
+  }
+
+  unsigned long elapsed = millis() - stepStart;
+
+  if (seqStep == 1 && elapsed >= 2000) {          // forward done
+    stopMotor();
+    myServo.write(90);
+    seqStep = 2;
+    stepStart = millis();
+  } else if (seqStep == 2 && elapsed >= 500) {    // short stop done
+    reverse(200);
+    myServo.write(180);
+    seqStep = 3;
+    stepStart = millis();
+  } else if (seqStep == 3 && elapsed >= 2000) {   // reverse done
+    stopMotor();
+    myServo.write(90);
+    seqStep = 0;
+    Serial.println("Motor sequence finished");
+  }
+}
